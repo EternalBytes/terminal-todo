@@ -1,89 +1,74 @@
 package todolist
 
 import (
-	"encoding/json"
-	"errors"
+	"database/sql"
 	"fmt"
-	"io/fs"
-	"os"
-	"slices"
+	"log"
 	"time"
 
+	"github.com/EternalBytes/todolist/service"
 	"github.com/alexeyco/simpletable"
 )
 
 type item struct {
-	Task        string    `json:"task"`
-	Done        bool      `json:"done"`
-	CreatedAt   time.Time `json:"createdat"`
-	CompletedAt time.Time `json:"completedat"`
+	Ind         int
+	Task        string
+	Done        bool
+	CreatedAt   time.Time
+	CompletedAt time.Time
 }
 
 type Todos []item
 
-func (t *Todos) Add(task string) {
-	todo := item{
-		Task:        task,
-		Done:        false,
-		CreatedAt:   time.Now(),
-		CompletedAt: time.Time{},
-	}
-
-	*t = append(*t, todo)
-}
-
-func (t *Todos) Complete(ind int) error {
-	td := *t
-	if ind <= 0 || ind > len(*t) {
-		return errors.New("invalid index")
-	}
-
-	td[ind-1].CompletedAt = time.Now()
-	td[ind-1].Done = true
-
-	return nil
-}
-
-func (t *Todos) Delete(ind int) error {
-	if ind <= 0 || ind > len(*t) {
-		return errors.New("invalid index")
-	}
-
-	*t = slices.Delete(*t, ind-1, ind)
-
-	return nil
-}
-
-func (t *Todos) Load(filename string) error {
-	data, err := os.ReadFile(filename)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
-		}
-		return err
-	}
-	if len(data) == 0 {
-		return err
-	}
-
-	err = json.Unmarshal(data, t)
+func (t *Todos) Add(task string) error {
+	db, err := service.GetDB()
+	defer close(db)
 	if err != nil {
 		return err
+	}
+	result, err := db.Exec("INSERT INTO todos(Task, Done, CreatedAt, CompletedAt) VALUES(?,?,?,?)",
+		task,
+		false,
+		time.Now(),
+		time.Time{})
+	if err != nil {
+		return err
+	}
+
+	rowsAf, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAf > 0 {
+		fmt.Println(ColorGreen + "Task added" + ColorDefault)
 	}
 	return nil
 }
 
-func (t *Todos) Store(filename string) error {
-	bytes, err := json.Marshal(t)
-	if err != nil {
-		return err
+func (t *Todos) Complete(ind int) {
+	db, err := service.GetDB()
+	defer close(db)
+	check(err)
+	rowsAf, err := db.Exec("UPDATE todos SET Done=?, CompletedAt=? WHERE Ind=?", true, time.Now(), ind)
+	check(err)
+	rows, err := rowsAf.RowsAffected()
+	check(err)
+	if rows > 0 {
+		fmt.Println(ColorGreen + "Task Completed" + ColorDefault)
 	}
+}
 
-	err = os.WriteFile(filename, bytes, fs.ModePerm)
-	if err != nil {
-		return err
+func (t *Todos) Delete(ind int) {
+	db, err := service.GetDB()
+	defer close(db)
+	check(err)
+	rowsAf, err := db.Exec("DELETE FROM todos WHERE Ind=?", ind)
+	check(err)
+	rows, err := rowsAf.RowsAffected()
+	check(err)
+	if rows > 0 {
+		fmt.Println(ColorRed + "Task Deleted" + ColorDefault)
 	}
-	return err
 }
 
 func (t *Todos) Print() {
@@ -101,26 +86,42 @@ func (t *Todos) Print() {
 
 	cells := new([][]*simpletable.Cell)
 
-	for ind, value := range *t {
-		ind++
-		task := blue(value.Task)
-		if value.Done {
-			task = green(fmt.Sprintf("\u2705 %s", value.Task))
+	db, err := service.GetDB()
+	defer close(db)
+	check(err)
+
+	rows, err := db.Query("SELECT * FROM todos")
+	defer func() {
+		err := rows.Close()
+		check(err)
+	}()
+	check(err)
+	var countUndone int
+	var it item
+	for rows.Next() {
+		rows.Scan(&it.Ind, &it.Task, &it.Done, &it.CreatedAt, &it.CompletedAt)
+
+		task := blue(it.Task)
+		if it.Done {
+			task = green(fmt.Sprintf("\u2705 %s", it.Task))
 		}
 		*cells = append(*cells, []*simpletable.Cell{
-			{Text: fmt.Sprintf("%d", ind)},
+			{Text: fmt.Sprintf("%d", it.Ind)},
 			{Text: task},
-			{Text: fmt.Sprintf("%t", value.Done)},
-			{Text: value.CreatedAt.Format(time.RFC822)},
-			{Text: value.CompletedAt.Format(time.RFC822)},
+			{Text: fmt.Sprintf("%t", it.Done)},
+			{Text: it.CreatedAt.Format(time.RFC822)},
+			{Text: it.CompletedAt.Format(time.RFC822)},
 		})
+		/// COUNT UNDONE
+		if !it.Done {
+			countUndone++
+		}
 	}
 
 	table.Body = &simpletable.Body{Cells: *cells}
 
-	undone := t.countUndone()
-	undTxt := red(fmt.Sprintf("\u26A0 %s", "You have "+fmt.Sprint(undone)+" task to do"))
-	if undone == 0 {
+	undTxt := red(fmt.Sprintf("\u26A0 %s", "You have "+fmt.Sprint(countUndone)+" task to do"))
+	if countUndone == 0 {
 		undTxt = blue(fmt.Sprintf("🎉 %s", "You've done all tasks"))
 	}
 	table.Footer = &simpletable.Footer{Cells: []*simpletable.Cell{
@@ -151,12 +152,15 @@ func blue(s string) string {
 	return fmt.Sprintf("%s%s%s", ColorBlue, s, ColorDefault)
 }
 
-func (t *Todos) countUndone() int {
-	var done int
-	for _, v := range *t {
-		if !v.Done {
-			done++
-		}
+func close(db *sql.DB) {
+	err := db.Close()
+	if err != nil {
+		panic(err)
 	}
-	return done
+}
+
+func check(err error) {
+	if err != nil {
+		log.Fatalln(err)
+	}
 }

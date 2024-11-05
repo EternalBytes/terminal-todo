@@ -5,14 +5,11 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"log"
 	"os"
 	"strings"
 
 	"github.com/EternalBytes/todolist"
-)
-
-const (
-	todoFile = ".todos.json" // name of the data file
 )
 
 func main() {
@@ -24,46 +21,20 @@ func main() {
 
 	todos := new(todolist.Todos)
 
-	if err := todos.Load(todoFile); err != nil {
-		os.Stderr.WriteString(err.Error())
-		os.Exit(1)
-	}
-
 	switch {
 	case *add:
 		task, err := parseInput(os.Stdin, flag.Args()...)
-		if err != nil {
-			os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
-		todos.Add(task)
-		if err := todos.Store(todoFile); err != nil {
-			os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
+		check(err)
+		err = todos.Add(task)
+		check(err)
 	case *complete > 0:
-		if err := todos.Complete(*complete); err != nil {
-			os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
-		if err := todos.Store(todoFile); err != nil {
-			os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
+		todos.Complete(*complete)
 	case *del > 0:
-		if err := todos.Delete(*del); err != nil {
-			os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
-		if err := todos.Store(todoFile); err != nil {
-			os.Stderr.WriteString(err.Error())
-			os.Exit(1)
-		}
+		todos.Delete(*del)
 	case *list:
 		todos.Print()
 	default:
-		os.Stderr.WriteString("invalid command or value")
-		os.Exit(1)
+		check(errors.New("invalid command or value "))
 	}
 }
 
@@ -85,4 +56,10 @@ func parseInput(r io.Reader, args ...string) (string, error) {
 	}
 
 	return text, nil
+}
+
+func check(err error) {
+	if err != nil {
+		log.Fatalln(err)
+	}
 }
