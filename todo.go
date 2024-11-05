@@ -10,7 +10,7 @@ import (
 	"github.com/alexeyco/simpletable"
 )
 
-type item struct {
+type Todo struct {
 	Ind         int
 	Task        string
 	Done        bool
@@ -18,9 +18,7 @@ type item struct {
 	CompletedAt time.Time
 }
 
-type Todos []item
-
-func (t *Todos) Add(task string) error {
+func (t *Todo) Add(task string) error {
 	db, err := service.GetDB()
 	defer close(db)
 	if err != nil {
@@ -45,7 +43,7 @@ func (t *Todos) Add(task string) error {
 	return nil
 }
 
-func (t *Todos) Complete(ind int) {
+func (t *Todo) Complete(ind int) {
 	db, err := service.GetDB()
 	defer close(db)
 	check(err)
@@ -58,20 +56,30 @@ func (t *Todos) Complete(ind int) {
 	}
 }
 
-func (t *Todos) Delete(ind int) {
+func (t *Todo) Delete(index int) {
 	db, err := service.GetDB()
 	defer close(db)
 	check(err)
-	rowsAf, err := db.Exec("DELETE FROM todos WHERE Ind=?", ind)
+
+	var query string = "DELETE FROM todos WHERE Ind=?"
+	if index == 0 {
+		query = "DELETE FROM todos;DELETE FROM sqlite_sequence"
+	}
+
+	rowsAf, err := db.Exec(query, index)
 	check(err)
 	rows, err := rowsAf.RowsAffected()
 	check(err)
 	if rows > 0 {
+		if index == 0 {
+			fmt.Println(ColorRed + "All Tasks Was Deleted" + ColorDefault)
+			return
+		}
 		fmt.Println(ColorRed + "Task Deleted" + ColorDefault)
 	}
 }
 
-func (t *Todos) Print() {
+func (t *Todo) Print() {
 	table := simpletable.New()
 
 	table.Header = &simpletable.Header{
@@ -97,32 +105,31 @@ func (t *Todos) Print() {
 	}()
 	check(err)
 	var countUndone int
-	var it item
+	var item Todo
 	for rows.Next() {
-		rows.Scan(&it.Ind, &it.Task, &it.Done, &it.CreatedAt, &it.CompletedAt)
+		rows.Scan(&item.Ind, &item.Task, &item.Done, &item.CreatedAt, &item.CompletedAt)
 
-		task := blue(it.Task)
-		if it.Done {
-			task = green(fmt.Sprintf("\u2705 %s", it.Task))
-		}
-		*cells = append(*cells, []*simpletable.Cell{
-			{Text: fmt.Sprintf("%d", it.Ind)},
-			{Text: task},
-			{Text: fmt.Sprintf("%t", it.Done)},
-			{Text: it.CreatedAt.Format(time.RFC822)},
-			{Text: it.CompletedAt.Format(time.RFC822)},
-		})
-		/// COUNT UNDONE
-		if !it.Done {
+		task := fmt.Sprint(ColorBlue + item.Task + ColorDefault)
+		if item.Done {
+			task = fmt.Sprint(ColorGreen + "\u2705 " + item.Task + ColorDefault)
+		} else {
+			// COUNT UNDONE
 			countUndone++
 		}
+		*cells = append(*cells, []*simpletable.Cell{
+			{Text: fmt.Sprintf("%d", item.Ind)},
+			{Text: task},
+			{Text: fmt.Sprintf("%t", item.Done)},
+			{Text: item.CreatedAt.Format(time.RFC822)},
+			{Text: item.CompletedAt.Format(time.RFC822)},
+		})
 	}
 
 	table.Body = &simpletable.Body{Cells: *cells}
 
-	undTxt := red(fmt.Sprintf("\u26A0 %s", "You have "+fmt.Sprint(countUndone)+" task to do"))
+	undTxt := fmt.Sprint(ColorRed + "\u26A0 You have " + fmt.Sprint(countUndone) + " task to do" + ColorDefault)
 	if countUndone == 0 {
-		undTxt = blue(fmt.Sprintf("🎉 %s", "You've done all tasks"))
+		undTxt = fmt.Sprint(ColorBlue + "🎉 You've done all tasks" + ColorDefault)
 	}
 	table.Footer = &simpletable.Footer{Cells: []*simpletable.Cell{
 		{Align: simpletable.AlignCenter, Span: 5, Text: undTxt},
@@ -139,18 +146,6 @@ const (
 	ColorBlue    = "\x1b[94m"
 	ColorRed     = "\x1b[91m"
 )
-
-func red(s string) string {
-	return fmt.Sprintf("%s%s%s", ColorRed, s, ColorDefault)
-}
-
-func green(s string) string {
-	return fmt.Sprintf("%s%s%s", ColorGreen, s, ColorDefault)
-}
-
-func blue(s string) string {
-	return fmt.Sprintf("%s%s%s", ColorBlue, s, ColorDefault)
-}
 
 func close(db *sql.DB) {
 	err := db.Close()

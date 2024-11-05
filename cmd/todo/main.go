@@ -16,10 +16,11 @@ func main() {
 	add := flag.Bool("add", false, "add a new todo")
 	complete := flag.Int("complete", 0, "set todo as completed")
 	del := flag.Int("delete", 0, "delete a todo")
+	delAll := flag.Bool("delete-all", false, "delete all todos and zero de database")
 	list := flag.Bool("list", false, "list all todos")
 	flag.Parse()
 
-	todos := new(todolist.Todos)
+	todos := new(todolist.Todo)
 
 	switch {
 	case *add:
@@ -29,7 +30,7 @@ func main() {
 		check(err)
 	case *complete > 0:
 		todos.Complete(*complete)
-	case *del > 0:
+	case *del > 0 || *delAll:
 		todos.Delete(*del)
 	case *list:
 		todos.Print()
