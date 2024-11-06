@@ -10,7 +10,14 @@ import (
 	"strings"
 
 	"github.com/EternalBytes/todolist"
+	"github.com/EternalBytes/todolist/service"
 )
+
+func init() {
+	var err error
+	todolist.Db, err = service.GetDB()
+	check(err)
+}
 
 func main() {
 	add := flag.Bool("add", false, "add a new todo")
@@ -20,20 +27,20 @@ func main() {
 	list := flag.Bool("list", false, "list all todos")
 	flag.Parse()
 
-	todos := new(todolist.Todo)
+	todo := new(todolist.Todo)
 
 	switch {
 	case *add:
 		task, err := parseInput(os.Stdin, flag.Args()...)
 		check(err)
-		err = todos.Add(task)
+		err = todo.Add(task)
 		check(err)
 	case *complete > 0:
-		todos.Complete(*complete)
+		todo.Complete(*complete)
 	case *del > 0 || *delAll:
-		todos.Delete(*del)
+		todo.Delete(*del)
 	case *list:
-		todos.Print()
+		todo.Print()
 	default:
 		check(errors.New("invalid command or value "))
 	}

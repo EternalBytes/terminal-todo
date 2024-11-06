@@ -6,9 +6,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/EternalBytes/todolist/service"
 	"github.com/alexeyco/simpletable"
 )
+
+var Db *sql.DB
 
 type Todo struct {
 	Ind         int
@@ -19,12 +20,8 @@ type Todo struct {
 }
 
 func (t *Todo) Add(task string) error {
-	db, err := service.GetDB()
-	defer close(db)
-	if err != nil {
-		return err
-	}
-	result, err := db.Exec("INSERT INTO todos(Task, Done, CreatedAt, CompletedAt) VALUES(?,?,?,?)",
+	defer close(Db)
+	result, err := Db.Exec("INSERT INTO todos(Task, Done, CreatedAt, CompletedAt) VALUES(?,?,?,?)",
 		task,
 		false,
 		time.Now(),
@@ -44,10 +41,8 @@ func (t *Todo) Add(task string) error {
 }
 
 func (t *Todo) Complete(ind int) {
-	db, err := service.GetDB()
-	defer close(db)
-	check(err)
-	rowsAf, err := db.Exec("UPDATE todos SET Done=?, CompletedAt=? WHERE Ind=?", true, time.Now(), ind)
+	defer close(Db)
+	rowsAf, err := Db.Exec("UPDATE todos SET Done=?, CompletedAt=? WHERE Ind=?", true, time.Now(), ind)
 	check(err)
 	rows, err := rowsAf.RowsAffected()
 	check(err)
@@ -57,16 +52,13 @@ func (t *Todo) Complete(ind int) {
 }
 
 func (t *Todo) Delete(index int) {
-	db, err := service.GetDB()
-	defer close(db)
-	check(err)
-
+	defer close(Db)
 	var query string = "DELETE FROM todos WHERE Ind=?"
 	if index == 0 {
 		query = "DELETE FROM todos;DELETE FROM sqlite_sequence"
 	}
 
-	rowsAf, err := db.Exec(query, index)
+	rowsAf, err := Db.Exec(query, index)
 	check(err)
 	rows, err := rowsAf.RowsAffected()
 	check(err)
@@ -94,23 +86,20 @@ func (t *Todo) Print() {
 
 	cells := new([][]*simpletable.Cell)
 
-	db, err := service.GetDB()
-	defer close(db)
-	check(err)
-
-	rows, err := db.Query("SELECT * FROM todos")
+	defer close(Db)
+	rows, err := Db.Query("SELECT * FROM todos")
 	defer func() {
 		err := rows.Close()
 		check(err)
 	}()
 	check(err)
 	var countUndone int
-	var item Todo
+	item := *t
 	for rows.Next() {
 		rows.Scan(&item.Ind, &item.Task, &item.Done, &item.CreatedAt, &item.CompletedAt)
 
 		task := fmt.Sprint(ColorBlue + item.Task + ColorDefault)
-		if item.Done {
+		if t.Done {
 			task = fmt.Sprint(ColorGreen + "\u2705 " + item.Task + ColorDefault)
 		} else {
 			// COUNT UNDONE
