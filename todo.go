@@ -99,7 +99,7 @@ func (t *Todo) Print() {
 		rows.Scan(&item.Ind, &item.Task, &item.Done, &item.CreatedAt, &item.CompletedAt)
 
 		task := fmt.Sprint(ColorBlue + item.Task + ColorDefault)
-		if t.Done {
+		if item.Done {
 			task = fmt.Sprint(ColorGreen + "\u2705 " + item.Task + ColorDefault)
 		} else {
 			// COUNT UNDONE
