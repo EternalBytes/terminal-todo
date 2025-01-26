@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"flag"
 	"io"
@@ -9,15 +10,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/EternalBytes/todolist"
+	"github.com/EternalBytes/todolist/db"
 	"github.com/EternalBytes/todolist/service"
 )
-
-func init() {
-	var err error
-	todolist.Db, err = service.GetDB()
-	check(err)
-}
 
 func main() {
 	add := flag.Bool("add", false, "add a new todo")
@@ -27,22 +22,28 @@ func main() {
 	list := flag.Bool("list", false, "list all todos")
 	flag.Parse()
 
-	todo := new(todolist.Todo)
+	var ctx = context.Background()
+	dbconn, err := service.GetDB()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	store := db.NewStore(dbconn)
 
 	switch {
 	case *add:
-		task, err := parseInput(os.Stdin, flag.Args()...)
-		check(err)
-		err = todo.Add(task)
-		check(err)
+		task, _ := parseInput(os.Stdin, flag.Args()...)
+		store.Add(ctx, task)
 	case *complete > 0:
-		todo.Complete(*complete)
-	case *del > 0 || *delAll:
-		todo.Delete(*del)
+		store.Complete(ctx, *complete)
+	case *del > 0:
+		store.Delete(ctx, *del)
+	case *delAll:
+		store.DelAll(ctx)
 	case *list:
-		todo.Print()
+		store.List(ctx)
 	default:
-		check(errors.New("invalid command or value "))
+		log.Fatalln("invalid command or value")
 	}
 }
 
@@ -64,10 +65,4 @@ func parseInput(r io.Reader, args ...string) (string, error) {
 	}
 
 	return text, nil
-}
-
-func check(err error) {
-	if err != nil {
-		log.Fatalln(err)
-	}
 }

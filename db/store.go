@@ -1,0 +1,125 @@
+package db
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/alexeyco/simpletable"
+)
+
+const (
+	ColorDefault = "\x1b[39m"
+	ColorGreen   = "\x1b[32m"
+	ColorBlue    = "\x1b[94m"
+	ColorRed     = "\x1b[91m"
+)
+
+type Store struct {
+	*Queries
+}
+
+func NewStore(db *sql.DB) *Store {
+	return &Store{
+		Queries: New(db),
+	}
+}
+
+func (s *Store) Add(ctx context.Context, task string) {
+	args := AddTodoParams{
+		Task:        task,
+		Done:        false,
+		CreatedAt:   time.Now(),
+		CompletedAt: time.Time{},
+	}
+
+	r, err := s.AddTodo(ctx, args)
+	check(err)
+
+	if r > 0 {
+		fmt.Println(ColorGreen + "Task added" + ColorDefault)
+	}
+}
+
+func (s *Store) Complete(ctx context.Context, index int) {
+	r, err := s.CompleteTodo(ctx, index)
+	check(err)
+
+	if r > 0 {
+		fmt.Println(ColorGreen + "Task Completed" + ColorDefault)
+	}
+}
+
+func (s *Store) Delete(ctx context.Context, index int) {
+	r, err := s.DeleteTodo(ctx, index)
+	check(err)
+
+	if r > 0 {
+		fmt.Println(ColorRed + "Task Deleted" + ColorDefault)
+	}
+}
+
+func (s *Store) DelAll(ctx context.Context) {
+	err := s.DeleteAll(ctx)
+	check(err)
+	fmt.Println(ColorRed + "All Tasks Was Deleted" + ColorDefault)
+}
+
+func (s *Store) List(ctx context.Context) {
+	rows, err := s.ListTodos(ctx)
+	check(err)
+
+	table := simpletable.New()
+	table.Header = &simpletable.Header{
+		Cells: []*simpletable.Cell{
+			{Align: simpletable.AlignCenter, Text: "#"},
+			{Align: simpletable.AlignCenter, Text: "Task"},
+			{Align: simpletable.AlignCenter, Text: "Done?"},
+			{Align: simpletable.AlignRight, Text: "CreatedAt"},
+			{Align: simpletable.AlignRight, Text: "CompletedAt"},
+		},
+	}
+
+	cells := new([][]*simpletable.Cell)
+
+	var countUndone int
+	for _, v := range rows {
+		task := fmt.Sprint(ColorBlue + v.Task + ColorDefault)
+		if v.Done {
+			task = fmt.Sprint(ColorGreen + "\u2705 " + v.Task + ColorDefault)
+		} else {
+			// COUNT UNDONE
+			countUndone++
+		}
+
+		*cells = append(*cells, []*simpletable.Cell{
+			{Text: fmt.Sprintf("%d", v.Ind)},
+			{Text: task},
+			{Text: fmt.Sprintf("%t", v.Done)},
+			{Text: v.CreatedAt.Format(time.RFC822)},
+			{Text: v.CompletedAt.Format(time.RFC822)},
+		})
+	}
+
+	table.Body = &simpletable.Body{Cells: *cells}
+
+	undTxt := fmt.Sprint(ColorRed + "\u26A0 You have " + fmt.Sprint(countUndone) + " tasks to do" + ColorDefault)
+	if countUndone == 0 {
+		undTxt = fmt.Sprint(ColorBlue + "🎉 You've done all tasks" + ColorDefault)
+	}
+	table.Footer = &simpletable.Footer{Cells: []*simpletable.Cell{
+		{Align: simpletable.AlignCenter, Span: 5, Text: undTxt},
+	}}
+
+	table.SetStyle(simpletable.StyleUnicode)
+
+	table.Println()
+}
+
+func check(err error) {
+	if err != nil {
+		log.Fatalln(err)
+	}
+}

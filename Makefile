@@ -1,2 +1,2 @@
-run/todo:
-	@go run ./cmd/todo -list
+list:
+	go run ./cmd/todo -list
