@@ -49,7 +49,9 @@ func (s *Store) Complete(ctx context.Context, index int) {
 
 	if r > 0 {
 		fmt.Println(ColorGreen + "Task Completed" + ColorDefault)
+		return
 	}
+	fmt.Println(ColorRed + "No Task to Complete" + ColorDefault)
 }
 
 func (s *Store) Delete(ctx context.Context, index int) {
@@ -58,7 +60,9 @@ func (s *Store) Delete(ctx context.Context, index int) {
 
 	if r > 0 {
 		fmt.Println(ColorRed + "Task Deleted" + ColorDefault)
+		return
 	}
+	fmt.Println(ColorRed + "No Task to Delete" + ColorDefault)
 }
 
 func (s *Store) DelAll(ctx context.Context) {
