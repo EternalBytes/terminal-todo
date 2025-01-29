@@ -72,8 +72,13 @@ func (s *Store) DelAll(ctx context.Context) {
 }
 
 func (s *Store) List(ctx context.Context) {
-	rows, err := s.ListTodos(ctx)
-	check(err)
+	rowschan := make(chan []Todo)
+	// creates a goroutine to get data in parallel
+	go func(rs chan []Todo) {
+		rows, err := s.ListTodos(ctx)
+		check(err)
+		rs <- rows
+	}(rowschan)
 
 	table := simpletable.New()
 	table.Header = &simpletable.Header{
@@ -88,11 +93,13 @@ func (s *Store) List(ctx context.Context) {
 
 	cells := new([][]*simpletable.Cell)
 
-	var countUndone int
-	for _, v := range rows {
+	var countUndone, countDone int
+	for _, v := range <-rowschan {
 		task := fmt.Sprint(ColorBlue + v.Task + ColorDefault)
 		if v.Done {
 			task = fmt.Sprint(ColorGreen + "\u2705 " + v.Task + ColorDefault)
+			// COUNT DONE
+			countDone++
 		} else {
 			// COUNT UNDONE
 			countUndone++
@@ -111,8 +118,14 @@ func (s *Store) List(ctx context.Context) {
 
 	undTxt := fmt.Sprint(ColorRed + "\u26A0 You have " + fmt.Sprint(countUndone) + " tasks to do" + ColorDefault)
 	if countUndone == 0 {
+		if countDone == 0 {
+			undTxt = fmt.Sprint(ColorRed + "No task was found." + ColorDefault)
+			goto footer // goto is very useful for a programmer as me @EternalBytes
+		}
 		undTxt = fmt.Sprint(ColorBlue + "🎉 You've done all tasks" + ColorDefault)
 	}
+
+footer:
 	table.Footer = &simpletable.Footer{Cells: []*simpletable.Cell{
 		{Align: simpletable.AlignCenter, Span: 5, Text: undTxt},
 	}}
