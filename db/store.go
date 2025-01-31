@@ -94,8 +94,8 @@ func (s *Store) List(ctx context.Context) {
 	cells := new([][]*simpletable.Cell)
 
 	var countUndone, countDone int
+	var task string
 	for _, v := range <-rowschan {
-		task := fmt.Sprint(ColorBlue + v.Task + ColorDefault)
 		if v.Done {
 			task = fmt.Sprint(ColorGreen + "\u2705 " + v.Task + ColorDefault)
 			// COUNT DONE
@@ -103,6 +103,7 @@ func (s *Store) List(ctx context.Context) {
 		} else {
 			// COUNT UNDONE
 			countUndone++
+			task = fmt.Sprint(ColorBlue + v.Task + ColorDefault)
 		}
 
 		*cells = append(*cells, []*simpletable.Cell{
@@ -116,13 +117,15 @@ func (s *Store) List(ctx context.Context) {
 
 	table.Body = &simpletable.Body{Cells: *cells}
 
-	undTxt := fmt.Sprint(ColorRed + "\u26A0 You have " + fmt.Sprint(countUndone) + " tasks to do" + ColorDefault)
+	var undTxt string
 	if countUndone == 0 {
 		if countDone == 0 {
 			undTxt = fmt.Sprint(ColorRed + "No task was found." + ColorDefault)
 			goto footer // goto is very useful for a programmer as me @EternalBytes
 		}
 		undTxt = fmt.Sprint(ColorBlue + "🎉 You've done all tasks" + ColorDefault)
+	} else {
+		undTxt = fmt.Sprint(ColorRed + "\u26A0 You have " + fmt.Sprint(countUndone) + " tasks to do" + ColorDefault)
 	}
 
 footer:
